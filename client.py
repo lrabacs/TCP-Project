@@ -1,7 +1,5 @@
 import hashlib
 import struct
-import sys
-from pathlib import Path
 
 from transport import TransportSocket
 
@@ -42,43 +40,42 @@ def recv_message(sock):
 
 
 def client_main():
-    # Send a file to the server using the reliable transport protocol.
-    if len(sys.argv) > 2:
-        print("Usage: python client.py [file]")
-        return
-
-    file_path = Path(sys.argv[1] if len(sys.argv) == 2 else "sample_data.txt")
-
-    if not file_path.is_file():
-        print(f"File not found: {file_path}")
-        return
-
-    file_data = file_path.read_bytes()
-    file_hash = hashlib.sha256(file_data).hexdigest()
-
-    client_socket = TransportSocket(debug=True)
+    # Request and display a file from the server.
+    client_socket = TransportSocket(debug=False)
 
     try:
         print(f"Connecting to {SERVER_HOST}:{SERVER_PORT}...")
         client_socket.connect(SERVER_HOST, SERVER_PORT)
 
-        print(f"Sending '{file_path.name}' ({len(file_data)} bytes)...")
+        print("Requesting file...")
+        send_message(client_socket, b"GET_FILE")
 
-        send_message(
-            client_socket,
-            file_path.name.encode("utf-8")
-        )
+        filename = recv_message(client_socket).decode("utf-8")
+        file_data = recv_message(client_socket)
+        server_hash = recv_message(client_socket).decode("utf-8")
 
-        send_message(
-            client_socket,
-            file_data
-        )
-
-        response = recv_message(client_socket).decode("utf-8")
+        local_hash = hashlib.sha256(file_data).hexdigest()
 
         print()
-        print(response)
-        print(f"Local SHA-256: {file_hash}")
+        print(f"Received '{filename}' ({len(file_data)} bytes)")
+        print()
+        print("File contents:")
+        print("-" * 50)
+
+        try:
+            print(file_data.decode("utf-8"))
+        except UnicodeDecodeError:
+            print("[Binary file received. Contents cannot be displayed as text.]")
+
+        print("-" * 50)
+        print()
+        print(f"Server SHA-256: {server_hash}")
+        print(f"Client SHA-256: {local_hash}")
+
+        if server_hash == local_hash:
+            print("Integrity check: PASS")
+        else:
+            print("Integrity check: FAIL")
 
     finally:
         client_socket.close()

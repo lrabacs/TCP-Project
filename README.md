@@ -53,18 +53,16 @@ Then start the client:
 python client.py
 ```
 
-By default, the client sends `sample_data.txt` to the server using the custom reliable transport protocol.
+The client connects to the server and requests `sample_data.txt`.
 
-The server saves the received file to:
+The server reads the file and sends it to the client using the custom reliable transport protocol. The client then displays the received file contents.
 
-`received_files/sample_data.txt`
+Both sides calculate a SHA-256 hash of the transferred file, and the client verifies that the hashes match.
 
-Both sides print the SHA-256 hash of the transferred file so the file's integrity can be verified.
+A successful transfer ends with:
 
-You can also send a different file:
-
-```bash
-python client.py path/to/file.txt
+```text
+Integrity check: PASS
 ```
 
 ## Automated Tests

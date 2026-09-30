@@ -6,7 +6,7 @@ from transport import TransportSocket
 
 
 SERVER_PORT = 54321
-OUTPUT_DIRECTORY = Path("received_files")
+FILE_TO_SERVE = Path("sample_data.txt")
 
 
 def send_message(sock, data):
@@ -41,8 +41,15 @@ def recv_message(sock):
 
 
 def server_main():
-    # Receive one file and save it using the reliable transport protocol.
-    server_socket = TransportSocket(debug=True)
+    # Serve a file to one connected client.
+    if not FILE_TO_SERVE.is_file():
+        print(f"File not found: {FILE_TO_SERVE}")
+        return
+
+    file_data = FILE_TO_SERVE.read_bytes()
+    file_hash = hashlib.sha256(file_data).hexdigest()
+
+    server_socket = TransportSocket(debug=False)
 
     try:
         print(f"Listening on port {SERVER_PORT}...")
@@ -50,37 +57,33 @@ def server_main():
 
         print("Client connected.")
 
-        filename = recv_message(server_socket).decode("utf-8")
-        filename = Path(filename).name
+        request = recv_message(server_socket).decode("utf-8")
 
-        file_data = recv_message(server_socket)
-
-        OUTPUT_DIRECTORY.mkdir(exist_ok=True)
-
-        output_path = OUTPUT_DIRECTORY / filename
-        output_path.write_bytes(file_data)
-
-        file_hash = hashlib.sha256(file_data).hexdigest()
+        if request != "GET_FILE":
+            raise ValueError(f"Unknown client request: {request}")
 
         print(
-            f"Received '{filename}' "
-            f"({len(file_data)} bytes)"
-        )
-
-        print(f"Saved to: {output_path}")
-        print(f"SHA-256: {file_hash}")
-
-        response = (
-            f"Transfer complete\n"
-            f"Server saved: {output_path}\n"
-            f"Bytes received: {len(file_data)}\n"
-            f"Server SHA-256: {file_hash}"
+            f"Sending '{FILE_TO_SERVE.name}' "
+            f"({len(file_data)} bytes)..."
         )
 
         send_message(
             server_socket,
-            response.encode("utf-8")
+            FILE_TO_SERVE.name.encode("utf-8")
         )
+
+        send_message(
+            server_socket,
+            file_data
+        )
+
+        send_message(
+            server_socket,
+            file_hash.encode("utf-8")
+        )
+
+        print("File sent successfully.")
+        print(f"SHA-256: {file_hash}")
 
     finally:
         server_socket.close()
