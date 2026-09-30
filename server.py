@@ -1,26 +1,22 @@
 import hashlib
-import random
-import string
 import struct
+from pathlib import Path
 
 from transport import TransportSocket
 
 
-def generate_random_data(size):
-    # Generate random bytes of the requested size
-    return "".join(
-        random.choices(string.ascii_letters + string.digits, k=size)
-    ).encode()
+SERVER_PORT = 54321
+OUTPUT_DIRECTORY = Path("received_files")
 
 
 def send_message(sock, data):
-    # Send one length-prefixed application message
+    # Send one length-prefixed application message.
     header = struct.pack("!I", len(data))
     sock.send(header + data)
 
 
 def recv_exact(sock, length):
-    # Receive exactly length bytes unless the connection closes early
+    # Receive exactly length bytes unless the connection closes early.
     data = bytearray()
 
     while len(data) < length:
@@ -37,7 +33,7 @@ def recv_exact(sock, length):
 
 
 def recv_message(sock):
-    # Receive one length-prefixed application message
+    # Receive one length-prefixed application message.
     header = recv_exact(sock, 4)
     message_length = struct.unpack("!I", header)[0]
 
@@ -45,55 +41,46 @@ def recv_message(sock):
 
 
 def server_main():
-    # Listen for one client and test bidirectional reliable transfer
+    # Receive one file and save it using the reliable transport protocol.
     server_socket = TransportSocket(debug=True)
 
     try:
-        server_socket.listen(54321)
+        print(f"Listening on port {SERVER_PORT}...")
+        server_socket.listen(SERVER_PORT)
 
-        print("Server: Waiting for client file...")
-        client_file_data = recv_message(server_socket)
+        print("Client connected.")
 
-        print(
-            f"Server: Received client file "
-            f"({len(client_file_data)} bytes)"
-        )
+        filename = recv_message(server_socket).decode("utf-8")
+        filename = Path(filename).name
 
-        print("Server: Waiting for client random data...")
-        client_random_data = recv_message(server_socket)
+        file_data = recv_message(server_socket)
 
-        print(
-            f"Server: Received {len(client_random_data)} bytes "
-            f"of random data from client"
-        )
+        OUTPUT_DIRECTORY.mkdir(exist_ok=True)
 
-        print(
-            f"Server SHA-256 received: "
-            f"{hashlib.sha256(client_random_data).hexdigest()}"
-        )
+        output_path = OUTPUT_DIRECTORY / filename
+        output_path.write_bytes(file_data)
 
-        server_data = b"This is a test message from the server."
+        file_hash = hashlib.sha256(file_data).hexdigest()
 
         print(
-            f"Server: Sending test message "
-            f"({len(server_data)} bytes)..."
+            f"Received '{filename}' "
+            f"({len(file_data)} bytes)"
         )
 
-        send_message(server_socket, server_data)
+        print(f"Saved to: {output_path}")
+        print(f"SHA-256: {file_hash}")
 
-        random_data = generate_random_data(100_000)
-
-        print(
-            f"Server: Sending {len(random_data)} bytes "
-            f"of random data..."
+        response = (
+            f"Transfer complete\n"
+            f"Server saved: {output_path}\n"
+            f"Bytes received: {len(file_data)}\n"
+            f"Server SHA-256: {file_hash}"
         )
 
-        print(
-            f"Server SHA-256 sent: "
-            f"{hashlib.sha256(random_data).hexdigest()}"
+        send_message(
+            server_socket,
+            response.encode("utf-8")
         )
-
-        send_message(server_socket, random_data)
 
     finally:
         server_socket.close()
